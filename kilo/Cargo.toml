@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 termios = "0.3.1"
+term_size = "0.3.1"
+unic-segment = "0.9.0"
