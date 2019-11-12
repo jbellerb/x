@@ -1,6 +1,7 @@
+use std::env;
 use std::fs::File;
 use std::io;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::time::Duration;
 
@@ -18,10 +19,14 @@ struct Editor {
     stdin: File,
     termios: Termios,
     poll: Poll,
-    cx: i32,
-    cy: i32,
-    screen_rows: i32,
-    screen_cols: i32,
+    cx: usize,
+    cy: usize,
+    offset_rows: usize,
+    offset_cols: usize,
+    screen_rows: usize,
+    screen_cols: usize,
+    num_rows: usize,
+    row: Option<Vec<String>>,
 }
 
 #[derive(Clone, Copy)]
@@ -50,8 +55,12 @@ impl Editor {
             poll: Poll::new()?,
             cx: 0,
             cy: 0,
-            screen_rows: h as i32,
-            screen_cols: w as i32,
+            offset_rows: 0,
+            offset_cols: 0,
+            screen_rows: h,
+            screen_cols: w,
+            num_rows: 0,
+            row: Option::None,
         };
 
         let mut raw = original.termios.clone();
@@ -156,31 +165,84 @@ fn editor_queued_key(stdin: &mut File, io_poll: &Poll, timeout: Option<Duration>
     None
 }
 
-fn truncate_to_editor_width(editor: &Editor, string: String) -> String {
-    let graphemes = Graphemes::new(&string).take(editor.screen_cols as usize);
+fn truncate_to_editor_width(editor: &Editor, string: &String) -> String {
+    let graphemes = Graphemes::new(string)
+        .skip(editor.offset_cols)
+        .take(editor.screen_cols);
     graphemes.fold(String::new(), |mut acc, grapheme| {
         acc.push_str(grapheme);
         acc
     })
 }
 
+/*** file i/o ***/
+
+fn editor_open(editor: &mut Editor, file: &File) {
+    let mut reader = BufReader::new(file);
+    loop {
+        let mut line = String::new();
+        let mut len = reader
+            .read_line(&mut line)
+            .expect("Error when reading file.");
+        if len == 0 {
+            break;
+        }
+
+        while len > 0 && (line.as_bytes()[len - 1] == b'\n' || line.as_bytes()[len - 1] == b'\r') {
+            len -= 1;
+        }
+
+        line.truncate(len);
+        match editor.row.as_mut() {
+            None => editor.row = Some(vec![line]),
+            Some(a) => a.push(line),
+        }
+        editor.num_rows += 1;
+    }
+}
+
 /*** output ***/
+
+fn editor_scroll(editor: &mut Editor) {
+    if editor.cy < editor.offset_rows {
+        editor.offset_rows = editor.cy;
+    }
+    if editor.cy >= editor.offset_rows + editor.screen_rows {
+        editor.offset_rows = editor.cy - editor.screen_rows + 1;
+    }
+    if editor.cx < editor.offset_cols {
+        editor.offset_cols = editor.cx;
+    }
+    if editor.cx >= editor.offset_cols + editor.screen_cols {
+        editor.offset_cols = editor.cx - editor.screen_cols + 1;
+    }
+}
 
 fn editor_draw_rows(editor: &Editor, buf: &mut String) {
     for y in 0..editor.screen_rows {
-        if y == editor.screen_rows / 3 {
-            let welcome =
-                truncate_to_editor_width(editor, format!("Kilo editor -- version {}", VERSION));
-            let padding = (editor.screen_cols - Graphemes::new(&welcome).count() as i32) / 2;
-            if padding > 0 {
+        let file_row = y + editor.offset_rows;
+        if file_row >= editor.num_rows {
+            if editor.num_rows == 0 && y == editor.screen_rows / 3 {
+                let welcome = truncate_to_editor_width(
+                    editor,
+                    &format!("Kilo editor -- version {}", VERSION),
+                );
+                let padding = (editor.screen_cols - Graphemes::new(&welcome).count()) / 2;
+                if padding > 0 {
+                    buf.push_str("~");
+                }
+                for _i in 1..padding {
+                    buf.push_str(" ")
+                }
+                buf.push_str(&welcome);
+            } else {
                 buf.push_str("~");
             }
-            for _i in 1..padding {
-                buf.push_str(" ")
-            }
-            buf.push_str(&welcome);
         } else {
-            buf.push_str("~");
+            buf.push_str(&truncate_to_editor_width(
+                editor,
+                &editor.row.as_ref().unwrap()[file_row],
+            ));
         }
 
         buf.push_str("\x1b[K");
@@ -190,7 +252,9 @@ fn editor_draw_rows(editor: &Editor, buf: &mut String) {
     }
 }
 
-fn editor_refresh_screen(editor: &Editor) {
+fn editor_refresh_screen(editor: &mut Editor) {
+    editor_scroll(editor);
+
     let mut buf = String::new();
 
     buf.push_str("\x1b[?25l");
@@ -198,7 +262,11 @@ fn editor_refresh_screen(editor: &Editor) {
 
     editor_draw_rows(editor, &mut buf);
 
-    buf.push_str(&format!("\x1b[{};{}H", editor.cy + 1, editor.cx + 1));
+    buf.push_str(&format!(
+        "\x1b[{};{}H",
+        editor.cy - editor.offset_rows + 1,
+        editor.cx - editor.offset_cols + 1
+    ));
     buf.push_str("\x1b[?25h");
 
     io::stdout()
@@ -212,22 +280,22 @@ fn editor_refresh_screen(editor: &Editor) {
 fn editor_move_cursor(editor: &mut Editor, key: EditorKey) {
     match key {
         EditorKey::ArrowLeft => {
-            if editor.cx != 0 {
+            if editor.cx > 0 {
                 editor.cx -= 1
             }
         }
         EditorKey::ArrowRight => {
-            if editor.cx != editor.screen_cols - 1 {
-                editor.cx += 1
-            }
+            //if editor.cx < editor.screen_cols - 1 {
+            editor.cx += 1
+            //}
         }
         EditorKey::ArrowUp => {
-            if editor.cy != 0 {
+            if editor.cy > 0 {
                 editor.cy -= 1
             }
         }
         EditorKey::ArrowDown => {
-            if editor.cy != editor.screen_rows - 1 {
+            if editor.cy < editor.num_rows {
                 editor.cy += 1
             }
         }
@@ -271,12 +339,18 @@ fn editor_process_keypress(editor: &mut Editor) -> Option<EditorKey> {
 /*** init ***/
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let fd = io::stdin().as_raw_fd();
+
     {
-        let fd = io::stdin().as_raw_fd();
         let mut editor = Editor::from(fd).expect("Failed to enter raw mode.");
+        if args.len() > 1 {
+            let file = File::open(&args[1]).expect("Failed to open file.");
+            editor_open(&mut editor, &file);
+        }
 
         loop {
-            editor_refresh_screen(&editor);
+            editor_refresh_screen(&mut editor);
 
             match editor_process_keypress(&mut editor) {
                 Some(_) => continue,
