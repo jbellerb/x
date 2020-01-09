@@ -1,91 +1,128 @@
-use serde::Deserialize;
-use serde::Serialize;
+use std::string::String;
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
-pub enum Info {
-    SingleFile {
-        #[serde(rename = "piece length")]
-        piece_length: i64,
-        #[serde(with = "chunk_hashes")]
-        pieces: Vec<[u8; 20]>,
-        name: String,
-        length: i64,
-    },
-    MultiFile {
-        #[serde(rename = "piece length")]
-        piece_length: i64,
-        #[serde(with = "chunk_hashes")]
-        pieces: Vec<[u8; 20]>,
-        name: String,
-        files: Vec<TorrentFiles>,
-    },
+use super::bencode::{integer, string};
+use super::{key_value_if, key_value_partial, string_obj, Info, TorrentFile};
+
+use nom::{
+    branch::alt,
+    bytes::complete::take,
+    character::complete::char,
+    combinator::{all_consuming, cut, map},
+    multi::{many0, many1, many_till},
+    sequence::{delimited, tuple},
+    IResult,
+};
+
+pub fn parse(i: &[u8]) -> IResult<&[u8], Info> {
+    delimited(char('d'), cut(alt((info_single, info_multi))), char('e'))(i)
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TorrentFiles {
-    length: i64,
-    path: Vec<String>,
-}
-
-mod chunk_hashes {
-    use serde::de::{self, Visitor};
-    use serde::{Deserializer, Serializer};
-
-    use std::fmt;
-    use std::marker::PhantomData;
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<[u8; 20]>, D::Error>
-    where
-        D: Deserializer<'de>,
+fn torrent_file(i: &[u8]) -> IResult<&[u8], TorrentFile> {
+    match delimited(
+        char('d'),
+        cut(tuple((
+            many_till(key_value_partial, key_value_if("length")),
+            many_till(key_value_partial, key_value_if("path")),
+            many0(key_value_partial),
+        ))),
+        char('e'),
+    )(i)
     {
-        struct ChunkVisitor(PhantomData<fn() -> u8>);
+        Ok((remaining_input, ((_, (_, length)), (_, (_, path)), _))) => {
+            let (_, path) = map(
+                all_consuming(delimited(char('l'), many1(string_obj), char('e'))),
+                |parts| {
+                    let mut parts = parts.iter();
+                    let mut path = String::new();
 
-        impl<'de> Visitor<'de> for ChunkVisitor {
-            type Value = Vec<[u8; 20]>;
+                    if let Some(part) = parts.next() {
+                        path.push_str(part);
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a nonempty array of 20 element chunks")
-            }
+                        for part in parts {
+                            path.push_str("/");
+                            path.push_str(part);
+                        }
+                    };
 
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                let mut seq = v.iter();
-                let mut chunks = Vec::new();
+                    path
+                },
+            )(path)?;
 
-                while let Some(value) = seq.next() {
-                    let mut chunk = [*value; 20];
-
-                    #[allow(clippy::needless_range_loop)]
-                    for i in 1..20 {
-                        chunk[i] = *seq
-                            .next()
-                            .ok_or_else(|| de::Error::custom("invalid chunk of 20"))?;
-                    }
-
-                    chunks.push(chunk);
-                }
-
-                Ok(chunks)
-            }
+            Ok((
+                remaining_input,
+                TorrentFile {
+                    length: all_consuming(integer)(length)?.1,
+                    path,
+                },
+            ))
         }
-
-        let visitor = ChunkVisitor(PhantomData);
-        deserializer.deserialize_bytes(visitor)
+        Err(e) => Err(e),
     }
+}
 
-    pub fn serialize<S>(hashes: &[[u8; 20]], serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+fn piece_hashes(i: &[u8]) -> IResult<&[u8], Vec<[u8; 20]>> {
+    let (_, i) = all_consuming(string)(i)?;
+
+    many1(map(take(20usize), |piece| {
+        let mut hash: [u8; 20] = Default::default();
+        // Relying on take to make sure the slice is the correct length
+        hash.copy_from_slice(piece);
+
+        hash
+    }))(i)
+}
+
+fn info_single(i: &[u8]) -> IResult<&[u8], Info> {
+    match tuple((
+        many_till(key_value_partial, key_value_if("length")),
+        many_till(key_value_partial, key_value_if("name")),
+        many_till(key_value_partial, key_value_if("piece length")),
+        many_till(key_value_partial, key_value_if("pieces")),
+        many0(key_value_partial),
+    ))(i)
     {
-        let mut output = Vec::new();
+        Ok((
+            remaining_input,
+            ((_, (_, length)), (_, (_, name)), (_, (_, piece_length)), (_, (_, pieces)), _),
+        )) => Ok((
+            remaining_input,
+            Info::SingleFile {
+                piece_length: all_consuming(integer)(piece_length)?.1,
+                pieces: all_consuming(piece_hashes)(pieces)?.1,
+                name: all_consuming(string_obj)(name)?.1,
+                length: all_consuming(integer)(length)?.1,
+            },
+        )),
+        Err(e) => Err(e),
+    }
+}
 
-        for hash in hashes {
-            output.extend(hash);
+fn info_multi(i: &[u8]) -> IResult<&[u8], Info> {
+    match tuple((
+        many_till(key_value_partial, key_value_if("files")),
+        many_till(key_value_partial, key_value_if("name")),
+        many_till(key_value_partial, key_value_if("piece length")),
+        many_till(key_value_partial, key_value_if("pieces")),
+        many0(key_value_partial),
+    ))(i)
+    {
+        Ok((
+            remaining_input,
+            ((_, (_, files)), (_, (_, name)), (_, (_, piece_length)), (_, (_, pieces)), _),
+        )) => {
+            let (_, files) =
+                all_consuming(delimited(char('l'), cut(many1(torrent_file)), char('e')))(files)?;
+
+            Ok((
+                remaining_input,
+                Info::MultiFile {
+                    piece_length: all_consuming(integer)(piece_length)?.1,
+                    pieces: all_consuming(piece_hashes)(pieces)?.1,
+                    name: all_consuming(string_obj)(name)?.1,
+                    files,
+                },
+            ))
         }
-
-        serializer.serialize_bytes(&output)
+        Err(e) => Err(e),
     }
 }
