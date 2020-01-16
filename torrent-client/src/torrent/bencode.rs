@@ -4,6 +4,7 @@ use std::num::ParseIntError;
 use std::str;
 use std::string::String;
 
+use anyhow::{anyhow, Result};
 use nom::{
     branch::alt,
     bytes::complete::take,
@@ -22,16 +23,16 @@ pub enum BencodeValue {
     BDictionary(HashMap<String, BencodeValue>),
 }
 
-fn from_decimal<T>(i: &[u8]) -> Result<T, ParseIntError>
+fn from_decimal<T>(i: &[u8]) -> Result<T>
 where
     T: str::FromStr<Err = ParseIntError>,
 {
-    let input = match str::from_utf8(i) {
-        Ok(a) => a,
-        Err(_) => "a", // I haven't found a better way to throw an error.
-    };
+    let input = str::from_utf8(i)?;
 
-    T::from_str(input)
+    match T::from_str(input) {
+        Ok(int) => Ok(int),
+        Err(_) => Err(anyhow!("Failed to parse \"{:?}\" as int.", input)),
+    }
 }
 
 pub fn string(i: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -40,11 +41,11 @@ pub fn string(i: &[u8]) -> IResult<&[u8], &[u8]> {
     take(length)(i)
 }
 
-fn invert(i: i64) -> Result<i64, &'static str> {
+fn invert(i: i64) -> Result<i64> {
     if i > 0 {
         Ok(-i)
     } else {
-        Err("invalid number")
+        Err(anyhow!("Failed to invert parsed number: {}", i))
     }
 }
 
@@ -75,13 +76,13 @@ fn key_value(i: &[u8]) -> IResult<&[u8], (String, BencodeValue)> {
 
 fn collect_if_sorted(
     entries: Vec<(String, BencodeValue)>,
-) -> Result<HashMap<String, BencodeValue>, &'static str> {
+) -> Result<HashMap<String, BencodeValue>> {
     let mut dictionary = HashMap::new();
     let mut last_key = String::new();
 
     for (key, value) in entries.into_iter() {
         match last_key.cmp(&key) {
-            Ordering::Greater => return Err("invalid dictionary"),
+            Ordering::Greater => return Err(anyhow!("Dictionary not sorted order.")),
             _ => {
                 last_key = key.clone();
                 dictionary.insert(key, value);

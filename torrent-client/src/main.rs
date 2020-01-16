@@ -1,21 +1,24 @@
 mod torrent;
 mod tracker;
 
-use serde_bencode::de;
 use std::fs;
-use torrent::Metainfo;
-use tracker::TrackerResponse;
 
-fn main() {
-    let contents = fs::read("test.torrent").unwrap();
+use torrent::Torrent;
+use tracker::ping_tracker;
 
-    let parsed_torrent = Metainfo::from_torrent(&contents).unwrap();
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let contents = fs::read("test.torrent")?;
+
+    let parsed_torrent = Torrent::from_torrent(&contents)?;
 
     //println!("{:?}", parsed_torrent);
 
-    let test = "d14:failure reason23:some reason for failuree";
+    let request = ping_tracker(&parsed_torrent).await?;
 
-    let parsed_response = de::from_str::<TrackerResponse>(test).unwrap();
+    println!("{:#?}", request);
 
-    println!("{:#?}", parsed_response);
+    Ok(())
 }

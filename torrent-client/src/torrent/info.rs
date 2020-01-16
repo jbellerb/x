@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::string::String;
 
 use super::bencode::{integer, string};
@@ -7,7 +8,7 @@ use nom::{
     branch::alt,
     bytes::complete::take,
     character::complete::char,
-    combinator::{all_consuming, cut, map},
+    combinator::{all_consuming, cut, map, map_res},
     multi::{many0, many1, many_till},
     sequence::{delimited, tuple},
     IResult,
@@ -51,7 +52,7 @@ fn torrent_file(i: &[u8]) -> IResult<&[u8], TorrentFile> {
             Ok((
                 remaining_input,
                 TorrentFile {
-                    length: all_consuming(integer)(length)?.1,
+                    length: map_res(all_consuming(integer), u64::try_from)(length)?.1,
                     path,
                 },
             ))
@@ -87,10 +88,10 @@ fn info_single(i: &[u8]) -> IResult<&[u8], Info> {
         )) => Ok((
             remaining_input,
             Info::SingleFile {
-                piece_length: all_consuming(integer)(piece_length)?.1,
+                piece_length: map_res(all_consuming(integer), u64::try_from)(piece_length)?.1,
                 pieces: all_consuming(piece_hashes)(pieces)?.1,
                 name: all_consuming(string_obj)(name)?.1,
-                length: all_consuming(integer)(length)?.1,
+                length: map_res(all_consuming(integer), u64::try_from)(length)?.1,
             },
         )),
         Err(e) => Err(e),
@@ -116,7 +117,7 @@ fn info_multi(i: &[u8]) -> IResult<&[u8], Info> {
             Ok((
                 remaining_input,
                 Info::MultiFile {
-                    piece_length: all_consuming(integer)(piece_length)?.1,
+                    piece_length: map_res(all_consuming(integer), u64::try_from)(piece_length)?.1,
                     pieces: all_consuming(piece_hashes)(pieces)?.1,
                     name: all_consuming(string_obj)(name)?.1,
                     files,
