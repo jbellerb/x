@@ -1,6 +1,7 @@
 use std::fmt;
 use std::marker::PhantomData;
 use std::str;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use super::torrent::Torrent;
 
@@ -82,18 +83,18 @@ pub enum TrackerResponse {
     Success {
         interval: i32,
         #[serde(deserialize_with = "peer_compact")]
-        peers: Vec<String>,
+        peers: Vec<SocketAddr>,
     },
 }
 
-pub fn peer_compact<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+pub fn peer_compact<'de, D>(deserializer: D) -> Result<Vec<SocketAddr>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    struct ChunkVisitor(PhantomData<fn() -> String>);
+    struct ChunkVisitor(PhantomData<fn() -> SocketAddr>);
 
     impl<'de> Visitor<'de> for ChunkVisitor {
-        type Value = Vec<String>;
+        type Value = Vec<SocketAddr>;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
             formatter.write_str("bittorrent peer list in binary format")
@@ -116,12 +117,12 @@ where
                         .ok_or_else(|| de::Error::custom("invalid peer chunk"))?;
                 }
 
-                peers.push(format!(
-                    "{}.{}.{}.{}:{}",
+                peers.push(SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(
                     chunk[0],
                     chunk[1],
                     chunk[2],
-                    chunk[3],
+                    chunk[3])),
                     u16::from_be_bytes([chunk[4], chunk[5]])
                 ));
             }
