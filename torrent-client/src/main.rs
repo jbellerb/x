@@ -1,3 +1,4 @@
+mod peer;
 mod torrent;
 mod tracker;
 

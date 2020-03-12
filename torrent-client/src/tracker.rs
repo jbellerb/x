@@ -56,14 +56,13 @@ pub async fn ping_tracker(torrent: &Torrent) -> Result<TrackerResponse> {
     };
 
     let request = reqwest::Client::new()
-        .get("https://httpbin.org/get")
+        .get(&torrent.metainfo.announce)
         .query(&form)
         .send()
-        .await.context(format!("Failed to connect to tracker {}.", tracker))?;
+        .await
+        .context(format!("Failed to connect to tracker {}.", tracker))?;
 
     let response = request.bytes().await?;
-
-    println!("{:#?}", response);
 
     match serde_bencode::de::from_bytes(&response).context("Failed to parse tracker response.")? {
         response @ TrackerResponse::Success { .. } => Ok(response),
@@ -82,30 +81,19 @@ pub enum TrackerResponse {
     },
     Success {
         interval: i32,
-        #[serde(rename = "tracker id")]
-        tracker_id: String,
-        complete: i32,
-        incomplete: i32,
-        #[serde(deserialize_with = "peer_list")]
-        peers: Vec<Peer>,
+        #[serde(deserialize_with = "peer_compact")]
+        peers: Vec<String>,
     },
 }
 
-#[derive(Serialize, Debug)]
-pub struct Peer {
-    peer_id: Option<String>,
-    ip: String,
-    port: i16,
-}
-
-pub fn peer_list<'de, D>(deserializer: D) -> Result<Vec<Peer>, D::Error>
+pub fn peer_compact<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    struct ChunkVisitor(PhantomData<fn() -> Peer>);
+    struct ChunkVisitor(PhantomData<fn() -> String>);
 
     impl<'de> Visitor<'de> for ChunkVisitor {
-        type Value = Vec<Peer>;
+        type Value = Vec<String>;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
             formatter.write_str("bittorrent peer list in binary format")
@@ -128,11 +116,14 @@ where
                         .ok_or_else(|| de::Error::custom("invalid peer chunk"))?;
                 }
 
-                peers.push(Peer {
-                    peer_id: None,
-                    ip: String::from("Hi"),
-                    port: 0,
-                });
+                peers.push(format!(
+                    "{}.{}.{}.{}:{}",
+                    chunk[0],
+                    chunk[1],
+                    chunk[2],
+                    chunk[3],
+                    u16::from_be_bytes([chunk[4], chunk[5]])
+                ));
             }
 
             Ok(peers)
