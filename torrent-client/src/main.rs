@@ -27,15 +27,11 @@ async fn main() -> Result<()> {
     for addr in lookup_host("localhost:39595").await? {
         let mut peer = timeout(
             Duration::from_secs(1),
-            Peer::handshake(
-                b"-M*0001-901234567890",
-                &parsed_torrent.metainfo.infohash,
-                addr,
-            ),
+            Peer::handshake(b"-M*0001-901234567890", &parsed_torrent, addr),
         )
         .await??;
 
-        println!("{:#?}", peer);
+        //println!("{:#?}", peer);
 
         peer.listen().await;
     }
