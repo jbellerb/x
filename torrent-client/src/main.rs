@@ -5,9 +5,9 @@ mod tracker;
 use std::fs;
 use std::time::Duration;
 
+use peer::Peer;
 use torrent::Torrent;
 use tracker::ping_tracker;
-use peer::Peer;
 
 use anyhow::Result;
 use tokio::net::lookup_host;
@@ -25,9 +25,19 @@ async fn main() -> Result<()> {
 
     // println!("{:#?}", request);
     for addr in lookup_host("localhost:39595").await? {
-        let peer = timeout(Duration::from_secs(1), Peer::handshake(b"-M*0001-901234567890", &parsed_torrent.metainfo.infohash, addr)).await?;
+        let mut peer = timeout(
+            Duration::from_secs(1),
+            Peer::handshake(
+                b"-M*0001-901234567890",
+                &parsed_torrent.metainfo.infohash,
+                addr,
+            ),
+        )
+        .await??;
 
         println!("{:#?}", peer);
+
+        peer.listen().await;
     }
 
     Ok(())

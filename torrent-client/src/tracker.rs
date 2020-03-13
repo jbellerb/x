@@ -1,7 +1,7 @@
 use std::fmt;
 use std::marker::PhantomData;
-use std::str;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::str;
 
 use super::torrent::Torrent;
 
@@ -118,12 +118,8 @@ where
                 }
 
                 peers.push(SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(
-                    chunk[0],
-                    chunk[1],
-                    chunk[2],
-                    chunk[3])),
-                    u16::from_be_bytes([chunk[4], chunk[5]])
+                    IpAddr::V4(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3])),
+                    u16::from_be_bytes([chunk[4], chunk[5]]),
                 ));
             }
 
