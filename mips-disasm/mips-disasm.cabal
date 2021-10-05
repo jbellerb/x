@@ -1,0 +1,49 @@
+cabal-version: 2.4
+name:          mips-disasm
+version:       0.1.0
+build-type:    Simple
+license:       GPL-3.0-or-later
+license-file:  LICENSE
+copyright:     (c) 2021 Jared Beller
+author:        Jared Beller <jbellerb@vt.edu>
+maintainer:    Jared Beller <jbellerb@vt.edu>
+stability:     alpha
+tested-with:   GHC == 8.10.6
+synopsis:      Hobby MIPS disassembler
+description:   Hobby MIPS disassembler
+
+library
+  hs-source-dirs: src
+  default-language: Haskell2010
+  ghc-options: -Wall -fwarn-incomplete-uni-patterns
+
+  build-depends:
+    base >=4.7 && <5,
+    bytestring,
+    text,
+    transformers
+
+  exposed-modules:
+    Lib,
+    MIPS.ISA.Field,
+    MIPS.ISA.Instruction,
+    MIPS.ISA.Opcode,
+    MIPS.ISA.Opcode.Class.Special,
+    MIPS.ISA.Opcode.Core,
+    MIPS.ISA.Register
+
+executable mdas
+  hs-source-dirs: app
+  main-is: Main.hs
+  default-language: Haskell2010
+  ghc-options: -Wall -rtsopts
+
+  build-depends:
+    mips-disasm,
+    base >=4.7 && <5,
+    filepath,
+    text,
+    show-prettyprint
+
+  other-modules:
+    Paths_mips_disasm
