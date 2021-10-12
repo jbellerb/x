@@ -27,10 +27,11 @@ library
     Lib,
     MIPS.ISA.Field,
     MIPS.ISA.Instruction,
-    MIPS.ISA.Opcode,
-    MIPS.ISA.Opcode.Class.Special,
-    MIPS.ISA.Opcode.Core,
+    MIPS.ISA.Instruction.Special,
     MIPS.ISA.Register
+
+  other-modules:
+    MIPS.ISA.Instruction.Decoders
 
 executable mdas
   hs-source-dirs: app
@@ -43,7 +44,6 @@ executable mdas
     base >=4.7 && <5,
     filepath,
     text,
-    show-prettyprint
 
   other-modules:
     Paths_mips_disasm

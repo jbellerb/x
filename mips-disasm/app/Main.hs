@@ -1,12 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Main where
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Data.Text.Read (hexadecimal)
 import Data.Version (showVersion)
-import Data.Word (Word32)
 import Lib (decodeInstructions)
 import Paths_mips_disasm (version)
 import System.Console.GetOpt
@@ -14,7 +10,6 @@ import System.Environment (getArgs, getProgName)
 import System.Exit (exitFailure, exitSuccess)
 import System.FilePath
 import System.IO
-import Text.Show.Prettyprint (prettyShow)
 
 data Options = Options
     { optInput :: IO T.Text
@@ -63,14 +58,11 @@ parseArgs = do
     usage p = "usage: " ++ p ++ " [-VO] [-o output_file] file"
     bail s = hPutStrLn stderr s >> exitFailure
 
-parseHex :: T.Text -> IO Word32
-parseHex t = case hexadecimal t of
-    Right (a, "") -> pure a
-    _ -> hPutStrLn stderr "Invalid object file" >> exitFailure
-
 main :: IO ()
 main = do
     opts <- parseArgs
     object <- optInput opts
 
-    putStrLn . prettyShow . decodeInstructions =<< mapM parseHex (T.lines object)
+    case decodeInstructions $ T.lines object of
+        Right instructions -> mapM_ print instructions
+        Left es -> mapM_ putStrLn es >> exitFailure
