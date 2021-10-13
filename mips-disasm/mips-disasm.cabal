@@ -20,11 +20,13 @@ library
   build-depends:
     base >=4.7 && <5,
     bytestring,
+    containers,
     text,
     transformers
 
   exposed-modules:
     Lib,
+    MIPS.Assembly,
     MIPS.ISA.Field,
     MIPS.ISA.Instruction,
     MIPS.ISA.Instruction.Special,

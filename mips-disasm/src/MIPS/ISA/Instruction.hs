@@ -15,43 +15,38 @@ module MIPS.ISA.Instruction
     , decodeInstruction
     ) where
 
-import Data.Word (Word32)
+import Data.Int (Int16)
+import Data.Word (Word16, Word32)
 import MIPS.ISA.Field (extractFieldOpcode, showField)
-import MIPS.ISA.Instruction.Decoders (constantOperation, immediateOperation)
+import MIPS.ISA.Instruction.Decoders
 import MIPS.ISA.Instruction.Special (InstructionSpecial, decodeInstructionSpecial)
 import MIPS.ISA.Register (Register)
 
-type ImmediateOperand = Word32
-
-data Instruction b
-    = AddImmediate Register Register ImmediateOperand
-    | AddImmediateUnsigned Register Register ImmediateOperand
-    | AndImmediate Register Register ImmediateOperand
-    | BranchEqual Register Register b
-    | BranchNotEqual Register Register b
-    | Jump Word32
-    | JumpAndLink Word32
-    | LoadByteUnsigned Register Register ImmediateOperand
-    | LoadHalfwordUnsigned Register Register ImmediateOperand
-    | LoadLinked Register Register ImmediateOperand
-    | LoadUpperImmediate Register ImmediateOperand
-    | LoadWord Register Register ImmediateOperand
-    | OrImmediate Register Register ImmediateOperand
-    | SetLessThanImmediate Register Register ImmediateOperand
-    | SetLessThanImmediateUnsigned Register Register ImmediateOperand
+data Instruction
+    = AddImmediate Register Register Int16
+    | AddImmediateUnsigned Register Register Int16
+    | AndImmediate Register Register Word16
+    | BranchEqual Register Register Int16
+    | BranchNotEqual Register Register Int16
+    | LoadByteUnsigned Register Register Word16
+    | LoadHalfwordUnsigned Register Register Word16
+    | LoadLinked Register Register Word16
+    | LoadUpperImmediate Register Word16
+    | LoadWord Register Register Word16
+    | OrImmediate Register Register Word16
+    | SetLessThanImmediate Register Register Int16
+    | SetLessThanImmediateUnsigned Register Register Int16
     | Special InstructionSpecial
-    | StoreByte Register Register ImmediateOperand
-    | StoreConditional Register Register ImmediateOperand
-    | StoreHalfword Register Register ImmediateOperand
-    | StoreWord Register Register ImmediateOperand
+    | StoreByte Register Register Word16
+    | StoreConditional Register Register Word16
+    | StoreHalfword Register Register Word16
+    | StoreWord Register Register Word16
 
-decodeInstruction :: Word32 -> Either String (Instruction Word32)
+decodeInstruction :: Word32 -> Either String Instruction
 decodeInstruction w = case extractFieldOpcode w of
     0x00 -> Special <$> decodeInstructionSpecial w
-    -- 0x02 -> jumpOperation Jump w
-    -- 0x03 -> jumpOperation JumpAndLink w
-    -- 0x04 -> pure BranchEqual
-    -- 0x05 -> pure BranchNotEqual
+    0x04 -> immediateOperation BranchEqual w
+    0x05 -> immediateOperation BranchNotEqual w
     0x08 -> immediateOperation AddImmediate w
     0x09 -> immediateOperation AddImmediateUnsigned w
     0x0a -> immediateOperation SetLessThanImmediate w
@@ -69,15 +64,13 @@ decodeInstruction w = case extractFieldOpcode w of
     0x38 -> immediateOperation StoreConditional w
     op -> Left $ "Unknown opcode (" ++ showField 6 op ++ ")"
 
-instance (Show b) => Show (Instruction b) where
+instance Show Instruction where
     show instruction = case instruction of
         AddImmediate rt rs imm -> showImmediate "addi" rt rs imm
         AddImmediateUnsigned rt rs imm -> showImmediate "addiu" rt rs imm
         AndImmediate rt rs imm -> showImmediate "andi" rt rs imm
         BranchEqual rt rs imm -> showImmediate "beq" rt rs imm
         BranchNotEqual rt rs imm -> showImmediate "bne" rt rs imm
-        Jump offset -> showUnary "j" offset
-        JumpAndLink offset -> showUnary "jal" offset
         LoadByteUnsigned rt rs imm -> showOffset "lbu" rt rs imm
         LoadHalfwordUnsigned rt rs imm -> showOffset "lhu" rt rs imm
         LoadLinked rt rs imm -> showOffset "ll" rt rs imm
@@ -96,5 +89,4 @@ instance (Show b) => Show (Instruction b) where
             concat [name, " ", show a, ", ", show b, ", ", show c]
         showOffset name a b o =
             concat [name, " ", show a, ", ", show o, "(", show b, ")"]
-        showUnary name a = concat [name, " ", show a]
         showImmediateUnary name a b = concat [name, " ", show a, ", ", show b]

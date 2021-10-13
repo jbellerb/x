@@ -16,7 +16,7 @@ module MIPS.ISA.Instruction.Decoders
     , constantOperation
     ) where
 
-import Data.Word (Word32)
+import Data.Word (Word16, Word32)
 import MIPS.ISA.Field
 import MIPS.ISA.Register (Register, decodeRegister)
 
@@ -48,16 +48,16 @@ binaryOperation func w = do
     expect (extractFieldShift w == 0x00) "Shift field must be zero"
     pure $ func rd rs rt
 
-immediateOperation :: (Register -> Register -> Word32 -> a) -> Word32 -> Either String a
+immediateOperation :: (Integral a) => (Register -> Register -> a -> b) -> Word32 -> Either String b
 immediateOperation func w = do
     rs <- decodeRegister $ extractFieldRS w
     rt <- decodeRegister $ extractFieldRT w
-    let imm = extractFieldImmediate w
+    let imm = fromIntegral $ extractFieldImmediate w
     pure $ func rt rs imm
 
-constantOperation :: (Register -> Word32 -> a) -> Word32 -> Either String a
+constantOperation :: (Register -> Word16 -> a) -> Word32 -> Either String a
 constantOperation func w = do
     expect (extractFieldRS w == 0x00) "RS field must be zero"
     rt <- decodeRegister $ extractFieldRT w
-    let imm = extractFieldImmediate w
+    let imm = fromIntegral $ extractFieldImmediate w
     pure $ func rt imm

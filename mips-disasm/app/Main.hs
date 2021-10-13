@@ -1,9 +1,26 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+
+{- |
+Module      :  Main
+Copyright   :  (c) Jared Beller 2021
+License     :  GPL-3.0-or-later
+
+Stability   :  experimental
+Portability :  non-portable (GHC Extensions)
+
+This program implements a basic disassembler for the MIPS architecture.
+Argument parsing and basic sequencing happen in this file, while the majority
+of parsing and rendering is done in Lib, with help from generic MIPS-related
+functions in MIPS.*.
+-}
+
 module Main where
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Version (showVersion)
-import Lib (decodeInstructions)
+import Lib (decodeInstructions, groupSegments, resolveLabels)
 import Paths_mips_disasm (version)
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
@@ -60,9 +77,13 @@ parseArgs = do
 
 main :: IO ()
 main = do
-    opts <- parseArgs
-    object <- optInput opts
+    Options {..} <- parseArgs
+    object <- optInput
 
     case decodeInstructions $ T.lines object of
-        Right instructions -> mapM_ print instructions
         Left es -> mapM_ putStrLn es >> exitFailure
+        Right rawInstructions -> do
+            let (labels, instructions) = resolveLabels rawInstructions
+                text = groupSegments labels instructions
+
+            optOutput $ T.intercalate "\n" $ map (T.pack . show) text

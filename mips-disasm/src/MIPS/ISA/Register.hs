@@ -87,4 +87,4 @@ instance Show Register where
         ReturnAddress -> "$ra"
 
 decodeRegister :: Word32 -> Either String Register
-decodeRegister = pure . toEnum . fromEnum
+decodeRegister = pure . toEnum . fromIntegral
