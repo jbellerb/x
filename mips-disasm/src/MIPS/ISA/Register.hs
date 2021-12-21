@@ -15,6 +15,7 @@ module MIPS.ISA.Register
     ) where
 
 import Data.Word (Word32)
+import Validation (Validation)
 
 data Register
     = Zero
@@ -86,5 +87,5 @@ instance Show Register where
         FramePointer -> "$fp"
         ReturnAddress -> "$ra"
 
-decodeRegister :: Word32 -> Either String Register
+decodeRegister :: (Semigroup a) => Word32 -> Validation a Register
 decodeRegister = pure . toEnum . fromIntegral

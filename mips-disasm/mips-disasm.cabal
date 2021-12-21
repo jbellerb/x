@@ -22,7 +22,8 @@ library
     bytestring,
     containers,
     text,
-    transformers
+    transformers,
+    validation-selective
 
   exposed-modules:
     Lib,

@@ -19,6 +19,7 @@ import Data.Word (Word32)
 import MIPS.ISA.Field (extractFieldFunction, showField)
 import MIPS.ISA.Instruction.Decoders
 import MIPS.ISA.Register (Register)
+import Validation (failure)
 
 data InstructionSpecial
     = Add Register Register Register
@@ -34,7 +35,7 @@ data InstructionSpecial
     | Subtract Register Register Register
     | SubtractUnsigned Register Register Register
 
-decodeInstructionSpecial :: Word32 -> Either String InstructionSpecial
+decodeInstructionSpecial :: Decoder InstructionSpecial
 decodeInstructionSpecial w = case extractFieldFunction w of
     0x00 -> shiftOperation ShiftLeftLogical w
     0x02 -> shiftOperation ShiftRightLogical w
@@ -48,7 +49,7 @@ decodeInstructionSpecial w = case extractFieldFunction w of
     0x27 -> binaryOperation NotOr w
     0x2a -> binaryOperation SetLessThan w
     0x2b -> binaryOperation SetLessThanUnsigned w
-    func -> Left $ "Invalid SPECIAL function (" ++ showField 6 func ++ ")"
+    func -> failure $ "Invalid SPECIAL function (" ++ showField 6 func ++ ")"
 
 instance Show InstructionSpecial where
     show instruction = case instruction of

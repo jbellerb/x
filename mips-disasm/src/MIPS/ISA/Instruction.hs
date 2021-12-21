@@ -16,11 +16,12 @@ module MIPS.ISA.Instruction
     ) where
 
 import Data.Int (Int16)
-import Data.Word (Word16, Word32)
+import Data.Word (Word16)
 import MIPS.ISA.Field (extractFieldOpcode, showField)
 import MIPS.ISA.Instruction.Decoders
 import MIPS.ISA.Instruction.Special (InstructionSpecial, decodeInstructionSpecial)
 import MIPS.ISA.Register (Register)
+import Validation (failure)
 
 data Instruction
     = AddImmediate Register Register Int16
@@ -28,21 +29,21 @@ data Instruction
     | AndImmediate Register Register Word16
     | BranchEqual Register Register Int16
     | BranchNotEqual Register Register Int16
-    | LoadByteUnsigned Register Register Word16
-    | LoadHalfwordUnsigned Register Register Word16
-    | LoadLinked Register Register Word16
+    | LoadByteUnsigned Register Register Int16
+    | LoadHalfwordUnsigned Register Register Int16
+    | LoadLinked Register Register Int16
     | LoadUpperImmediate Register Word16
-    | LoadWord Register Register Word16
+    | LoadWord Register Register Int16
     | OrImmediate Register Register Word16
     | SetLessThanImmediate Register Register Int16
     | SetLessThanImmediateUnsigned Register Register Int16
     | Special InstructionSpecial
-    | StoreByte Register Register Word16
-    | StoreConditional Register Register Word16
-    | StoreHalfword Register Register Word16
-    | StoreWord Register Register Word16
+    | StoreByte Register Register Int16
+    | StoreConditional Register Register Int16
+    | StoreHalfword Register Register Int16
+    | StoreWord Register Register Int16
 
-decodeInstruction :: Word32 -> Either String Instruction
+decodeInstruction :: Decoder Instruction
 decodeInstruction w = case extractFieldOpcode w of
     0x00 -> Special <$> decodeInstructionSpecial w
     0x04 -> immediateOperation BranchEqual w
@@ -62,15 +63,15 @@ decodeInstruction w = case extractFieldOpcode w of
     0x2b -> immediateOperation StoreWord w
     0x30 -> immediateOperation LoadLinked w
     0x38 -> immediateOperation StoreConditional w
-    op -> Left $ "Unknown opcode (" ++ showField 6 op ++ ")"
+    op -> failure $ "Unknown opcode (" ++ showField 6 op ++ ")"
 
 instance Show Instruction where
     show instruction = case instruction of
         AddImmediate rt rs imm -> showImmediate "addi" rt rs imm
         AddImmediateUnsigned rt rs imm -> showImmediate "addiu" rt rs imm
         AndImmediate rt rs imm -> showImmediate "andi" rt rs imm
-        BranchEqual rt rs imm -> showImmediate "beq" rt rs imm
-        BranchNotEqual rt rs imm -> showImmediate "bne" rt rs imm
+        BranchEqual rt rs imm -> showImmediate "beq" rs rt imm
+        BranchNotEqual rt rs imm -> showImmediate "bne" rs rt imm
         LoadByteUnsigned rt rs imm -> showOffset "lbu" rt rs imm
         LoadHalfwordUnsigned rt rs imm -> showOffset "lhu" rt rs imm
         LoadLinked rt rs imm -> showOffset "ll" rt rs imm

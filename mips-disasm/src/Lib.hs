@@ -20,12 +20,15 @@ module Lib
     , groupSegments
     ) where
 
+import Data.Bifunctor (bimap)
+import Data.List.NonEmpty (toList)
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Data.Text.Read (hexadecimal)
 import Data.Word (Word32)
 import MIPS.Assembly
 import MIPS.ISA.Instruction (Instruction (..), decodeInstruction)
+import Validation (Validation (..), validationToEither)
 
 parseHex :: T.Text -> Either String Word32
 parseHex t = case hexadecimal t of
@@ -36,14 +39,13 @@ parseHex t = case hexadecimal t of
 -- Applicative instance only returns the first error, so we have to create
 -- our own traverse which collects multiple errors.
 decodeInstructions :: [T.Text] -> Either [String] [ResolvedInstruction]
-decodeInstructions = foldr process (pure []) . zip [1 :: Int ..]
+decodeInstructions = validationToEither . mconcat . zipWith process [1 :: Int ..]
   where
-    errorMessage w i = "Cannot disassemble " ++ T.unpack w ++ " at line " ++ show i
-    process (i, word) ys = case decodeInstruction =<< parseHex word of
-        Right a -> (ResolvedInstruction a :) <$> ys
-        Left _ -> Left $ case ys of
-            Right _ -> [errorMessage word i]
-            Left es -> errorMessage word i : es
+    errorMessage w i = "Cannot disassemble " ++ T.unpack w ++ " at line " ++ show i ++ ":\n"
+    combineErrors w i = (errorMessage w i ++) . unlines . toList
+    process i word = case parseHex word of
+        Right w -> bimap (pure . combineErrors word i) (pure . ResolvedInstruction) $ decodeInstruction w
+        Left s -> Failure [errorMessage word i ++ s]
 
 resolveLabels :: [ResolvedInstruction] -> (S.Set Label, [UnresolvedInstruction])
 resolveLabels = foldr resolveBranch (S.empty, []) . zip [1 ..]

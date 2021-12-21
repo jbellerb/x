@@ -14,50 +14,53 @@ module MIPS.ISA.Instruction.Decoders
     , registerBranchOperation
     , immediateOperation
     , constantOperation
+
+      -- * Decoder result type
+    , Decoder
     ) where
 
+import Data.List.NonEmpty (NonEmpty)
 import Data.Word (Word16, Word32)
 import MIPS.ISA.Field
 import MIPS.ISA.Register (Register, decodeRegister)
+import Validation (Validation, failureIf)
 
-expect :: Bool -> String -> Either String ()
-expect True _ = pure ()
-expect False s = Left s
+type Decoder a = Word32 -> Validation (NonEmpty String) a
 
-shiftOperation :: (Register -> Register -> Word32 -> a) -> Word32 -> Either String a
-shiftOperation func w = do
-    expect (extractFieldRS w == 0x00) "RS field must be zero"
-    rt <- decodeRegister $ extractFieldRT w
-    rd <- decodeRegister $ extractFieldRD w
-    let sa = extractFieldShift w
-    pure $ func rd rt sa
+shiftOperation :: (Register -> Register -> Word32 -> a) -> Decoder a
+shiftOperation func w =
+    func
+        <$> decodeRegister (extractFieldRD w)
+        <*> decodeRegister (extractFieldRT w)
+        <*> pure (extractFieldShift w)
+        <* failureIf (extractFieldRS w /= 0x00) "RS field must be zero"
 
-registerBranchOperation :: (Register -> a) -> Word32 -> Either String a
-registerBranchOperation func w = do
-    rs <- decodeRegister $ extractFieldRS w
-    expect (extractFieldRT w == 0x00) "RT field must be zero"
-    expect (extractFieldRD w == 0x00) "RD field must be zero"
-    expect (extractFieldShift w == 0x00) "Jump hint must be zero"
-    pure $ func rs
+registerBranchOperation :: (Register -> a) -> Decoder a
+registerBranchOperation func w =
+    func
+        <$> decodeRegister (extractFieldRS w)
+        <* failureIf (extractFieldRT w /= 0x00) "RT field must be zero"
+        <* failureIf (extractFieldRD w /= 0x00) "RD field must be zero"
+        <* failureIf (extractFieldShift w /= 0x00) "Jump hint must be zero"
 
-binaryOperation :: (Register -> Register -> Register -> a) -> Word32 -> Either String a
-binaryOperation func w = do
-    rs <- decodeRegister $ extractFieldRS w
-    rt <- decodeRegister $ extractFieldRT w
-    rd <- decodeRegister $ extractFieldRD w
-    expect (extractFieldShift w == 0x00) "Shift field must be zero"
-    pure $ func rd rs rt
+binaryOperation :: (Register -> Register -> Register -> a) -> Decoder a
+binaryOperation func w =
+    func
+        <$> decodeRegister (extractFieldRD w)
+        <*> decodeRegister (extractFieldRS w)
+        <*> decodeRegister (extractFieldRT w)
+        <* failureIf (extractFieldShift w /= 0x00) "Shift field must be zero"
 
-immediateOperation :: (Integral a) => (Register -> Register -> a -> b) -> Word32 -> Either String b
-immediateOperation func w = do
-    rs <- decodeRegister $ extractFieldRS w
-    rt <- decodeRegister $ extractFieldRT w
-    let imm = fromIntegral $ extractFieldImmediate w
-    pure $ func rt rs imm
+immediateOperation :: (Integral a) => (Register -> Register -> a -> b) -> Decoder b
+immediateOperation func w =
+    func
+        <$> decodeRegister (extractFieldRT w)
+        <*> decodeRegister (extractFieldRS w)
+        <*> pure (fromIntegral (extractFieldImmediate w))
 
-constantOperation :: (Register -> Word16 -> a) -> Word32 -> Either String a
-constantOperation func w = do
-    expect (extractFieldRS w == 0x00) "RS field must be zero"
-    rt <- decodeRegister $ extractFieldRT w
-    let imm = fromIntegral $ extractFieldImmediate w
-    pure $ func rt imm
+constantOperation :: (Register -> Word16 -> a) -> Decoder a
+constantOperation func w =
+    func
+        <$> decodeRegister (extractFieldRT w)
+        <*> pure (fromIntegral (extractFieldImmediate w))
+        <* failureIf (extractFieldRS w /= 0x00) "RS field must be zero"
