@@ -5,20 +5,20 @@ authors = ["Jared Beller <jbellerb@vt.edu>"]
 edition = "2018"
 
 [dependencies]
-rand = "0.7"
+rand = "0.8"
 anyhow = "1.0"
-bytes = "0.5"
-rust-crypto = "0.2"
+bytes = "1.1"
+sha1 = "0.10"
 tracing = "0.1"
 tracing-futures = "0.2"
-tracing-subscriber = "0.2"
+tracing-subscriber = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_bencode = "0.2"
-nom = "5.1"
-tokio = { version = "0.2.22", features = ["full"] }
-tokio-util = { version = "0.3", features = ["codec"] }
+nom = "7.1"
+tokio = { version = "1.19", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
 futures = "0.3"
-reqwest = "0.10"
-crossbeam-queue = "0.2"
-crossbeam-utils = "0.7"
+reqwest = "0.11"
+crossbeam-queue = "0.3"
+crossbeam-utils = "0.8"

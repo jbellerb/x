@@ -40,7 +40,7 @@ impl Picker {
     }
 
     pub fn pop(&self) -> Option<Block> {
-        if let Ok(block) = self.queue.pop() {
+        if let Some(block) = self.queue.pop() {
             return Some(block);
         }
 

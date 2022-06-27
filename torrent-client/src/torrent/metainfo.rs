@@ -1,7 +1,5 @@
 use super::{info, key_value_if, key_value_partial, string_obj, Metainfo};
 
-use crypto::digest::Digest;
-use crypto::sha1::Sha1;
 use nom::{
     character::complete::char,
     combinator::all_consuming,
@@ -9,6 +7,7 @@ use nom::{
     sequence::{delimited, tuple},
     IResult,
 };
+use sha1::{Digest, Sha1};
 
 pub fn parse(i: &[u8]) -> IResult<&[u8], Metainfo> {
     all_consuming(delimited(char('d'), metainfo, char('e')))(i)
@@ -28,10 +27,8 @@ fn metainfo(i: &[u8]) -> IResult<&[u8], Metainfo> {
             };
 
             let mut hasher = Sha1::new();
-            hasher.input(info_raw);
-
-            let mut infohash = [0; 20];
-            hasher.result(&mut infohash);
+            hasher.update(info_raw);
+            let infohash = hasher.finalize().into();
 
             Ok((
                 remaining_input,

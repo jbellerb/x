@@ -51,7 +51,7 @@ fn invert(i: i64) -> Result<i64> {
 
 fn signed(i: &[u8]) -> IResult<&[u8], i64> {
     let (i, sign) = opt(char('-'))(i)?;
-    let num = map_res(digit1, from_decimal);
+    let mut num = map_res(digit1, from_decimal);
 
     match sign {
         Some(_) => map_res(num, invert)(i),

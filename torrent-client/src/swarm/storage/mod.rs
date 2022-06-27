@@ -11,10 +11,10 @@ use lookup::FileMap;
 
 use anyhow::Result;
 use bytes::{BufMut, Bytes, BytesMut};
-use crypto::{digest::Digest, sha1::Sha1};
+use sha1::{Digest, Sha1};
 use tokio::{
     fs::OpenOptions,
-    io::AsyncWriteExt,
+    io::{AsyncSeekExt, AsyncWriteExt},
     sync::mpsc,
     task::{self, JoinHandle},
 };
@@ -166,10 +166,8 @@ async fn work(
 fn validate(hashes: &[[u8; 20]], piece: u32, data: &Bytes) -> bool {
     trace!("checking the integrity of piece {}", piece);
     let mut hasher = Sha1::new();
-    hasher.input(&data);
-
-    let mut recieved_hash = [0; 20];
-    hasher.result(&mut recieved_hash);
+    hasher.update(&data);
+    let recieved_hash: [u8; 20] = hasher.finalize().into();
 
     recieved_hash == hashes[piece as usize]
 }
