@@ -2,7 +2,6 @@ use super::{info, key_value_if, key_value_partial, string_obj, Metainfo};
 
 use crypto::digest::Digest;
 use crypto::sha1::Sha1;
-
 use nom::{
     character::complete::char,
     combinator::all_consuming,

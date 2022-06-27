@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::str;
 
-use super::torrent::Torrent;
+use crate::swarm::SwarmHandle;
 
 use anyhow::{anyhow, Context, Result};
 use serde::de::{self, Visitor};
@@ -41,27 +41,25 @@ where
     unsafe { serializer.serialize_str(str::from_utf8_unchecked(bytes)) }
 }
 
-pub async fn ping_tracker(torrent: &Torrent) -> Result<TrackerResponse> {
-    let tracker = &torrent.metainfo.announce;
-
+pub async fn ping_tracker(swarm: &SwarmHandle) -> Result<TrackerResponse> {
     let form = TrackerRequest {
-        info_hash: torrent.metainfo.infohash,
+        info_hash: swarm.infohash,
         peer_id: [1; 20],
         port: 1,
-        uploaded: torrent.uploaded,
-        downloaded: torrent.downloaded,
-        left: torrent.left,
+        uploaded: swarm.uploaded(),
+        downloaded: swarm.downloaded(),
+        left: swarm.left(),
         compact: 1,
         event: None,
-        trackerid: torrent.tracker_id.clone(),
+        trackerid: swarm.tracker_id.clone(),
     };
 
     let request = reqwest::Client::new()
-        .get(&torrent.metainfo.announce)
+        .get(&swarm.announce)
         .query(&form)
         .send()
         .await
-        .context(format!("Failed to connect to tracker {}.", tracker))?;
+        .context(format!("Failed to connect to tracker {}.", &swarm.announce))?;
 
     let response = request.bytes().await?;
 
@@ -104,23 +102,18 @@ where
         where
             E: de::Error,
         {
-            let mut seq = v.iter();
+            let mut chunks = v.chunks_exact(6);
             let mut peers = Vec::new();
 
-            while let Some(value) = seq.next() {
-                let mut chunk = [*value; 6];
-
-                #[allow(clippy::needless_range_loop)]
-                for i in 1..6 {
-                    chunk[i] = *seq
-                        .next()
-                        .ok_or_else(|| de::Error::custom("invalid peer chunk"))?;
-                }
-
+            while let Some(chunk) = chunks.next() {
                 peers.push(SocketAddr::new(
                     IpAddr::V4(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3])),
                     u16::from_be_bytes([chunk[4], chunk[5]]),
                 ));
+            }
+
+            if !chunks.remainder().is_empty() {
+                return Err(de::Error::custom("invalid peer chunk"));
             }
 
             Ok(peers)

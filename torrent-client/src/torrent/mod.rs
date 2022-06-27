@@ -3,6 +3,7 @@ mod info;
 mod metainfo;
 
 use bencode::{bencode_value, string};
+use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 use nom::{
@@ -12,35 +13,17 @@ use nom::{
 };
 
 #[derive(Debug)]
-pub struct Torrent {
-    pub metainfo: Metainfo,
-    pub uploaded: u64,
-    pub downloaded: u64,
-    pub left: u64,
-    pub tracker_id: Option<String>,
-}
-
-#[derive(Debug)]
 pub struct Metainfo {
     pub info: Info,
     pub infohash: [u8; 20],
     pub announce: String,
 }
 
-impl Torrent {
-    pub fn from_torrent(torrent: &[u8]) -> Result<Torrent> {
-        match metainfo::parse(torrent) {
-            Ok(([], metainfo)) => Ok(Torrent {
-                left: match metainfo.info {
-                    Info::SingleFile { length, .. } => length,
-                    Info::MultiFile { .. } => unimplemented!(),
-                },
-                metainfo,
-                uploaded: 0,
-                downloaded: 0,
-                tracker_id: None,
-            }),
-            Err(_) => Err(anyhow!("Failed to parse torrent file.")),
+impl Metainfo {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Metainfo> {
+        match metainfo::parse(bytes) {
+            Ok(([], metainfo)) => Ok(metainfo),
+            Err(_) => Err(anyhow!("Failed to parse torrent.")),
             _ => unreachable!(), // The remaining slice of the input should
                                  // always be empty as parse is all_consuming.
         }
@@ -50,13 +33,13 @@ impl Torrent {
 #[derive(Debug)]
 pub enum Info {
     SingleFile {
-        piece_length: u64,
+        piece_length: u32,
         pieces: Vec<[u8; 20]>,
         name: String,
         length: u64,
     },
     MultiFile {
-        piece_length: u64,
+        piece_length: u32,
         pieces: Vec<[u8; 20]>,
         name: String,
         files: Vec<TorrentFile>,
@@ -66,7 +49,7 @@ pub enum Info {
 #[derive(Debug)]
 pub struct TorrentFile {
     pub length: u64,
-    pub path: String,
+    pub path: PathBuf,
 }
 
 // Shared parsers

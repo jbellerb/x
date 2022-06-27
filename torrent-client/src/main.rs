@@ -1,40 +1,50 @@
 mod peer;
+mod picker;
+mod protocol;
+mod swarm;
 mod torrent;
 mod tracker;
 
 use std::fs;
-use std::time::Duration;
+use std::io;
 
-use peer::Peer;
-use torrent::Torrent;
+use torrent::Metainfo;
 use tracker::ping_tracker;
 
 use anyhow::Result;
-use tokio::net::lookup_host;
-use tokio::time::timeout;
+use tracing::{info_span, Level};
+use tracing_futures::Instrument;
+use tracing_subscriber::fmt::format::FmtSpan;
+
+pub const PEER_PREFIX: &[u8; 8] = b"-M*010A-";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let contents = fs::read("test.torrent")?;
+    init_logging();
 
-    let parsed_torrent = Torrent::from_torrent(&contents)?;
+    let contents = fs::read("song.torrent")?;
+
+    let parsed_torrent = Metainfo::from_bytes(&contents)?;
 
     //println!("{:?}", parsed_torrent);
 
     // let request = ping_tracker(&parsed_torrent).await?;
 
     // println!("{:#?}", request);
-    for addr in lookup_host("localhost:39595").await? {
-        let mut peer = timeout(
-            Duration::from_secs(1),
-            Peer::handshake(b"-M*0001-901234567890", &parsed_torrent, addr),
-        )
-        .await??;
 
-        //println!("{:#?}", peer);
+    let swarm = swarm::spawn(parsed_torrent)
+        .instrument(info_span!("swarm"))
+        .await?;
 
-        peer.listen().await;
-    }
+    swarm.close().await?;
 
     Ok(())
+}
+
+fn init_logging() {
+    tracing_subscriber::fmt()
+        .with_max_level(Level::DEBUG)
+        .with_span_events(FmtSpan::NONE)
+        .with_writer(io::stderr)
+        .init();
 }
