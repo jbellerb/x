@@ -34,9 +34,10 @@
           };
           settings.global.excludes = [
             ".envrc"
+            ".env.example"
+            "gomod2nix.toml"
             "LICENSE"
             "README.md"
-            "gomod2nix.toml"
           ];
         }
       );
@@ -57,13 +58,25 @@
         root = ./.;
         fileset = pkgs.lib.fileset.unions [
           ./go.mod
+          ./go.sum
           (pkgs.lib.fileset.fileFilter (file: file.hasExt "go") ./.)
         ];
       };
 
+      commitHash = self.shortRev or self.dirtyShortRev;
+      commitDate = builtins.concatStringsSep "-" (
+        builtins.match "([0-9]{4})([0-9]{2})([0-9]{2}).*" self.lastModifiedDate
+      );
+
       commonArgs = {
         inherit pname version src;
         modules = ./gomod2nix.toml;
+
+        ldflags = [
+          "-X jae.zone/x/wumpussh/internal/cli.Version=${version}"
+          "-X jae.zone/x/wumpussh/internal/cli.CommitDate=${commitDate}"
+          "-X jae.zone/x/wumpussh/internal/cli.CommitHash=${commitHash}"
+        ];
 
         nativeBuildInputs = [ goHelperFunctionsHook ];
       };
